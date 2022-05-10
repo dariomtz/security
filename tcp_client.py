@@ -2,10 +2,12 @@ import socket
 import nacl.secret
 import nacl.utils
 from nacl.bindings import sodium_increment
+from nacl.signing import SigningKey
 
 HOST = "127.0.0.1"  # The server's hostname or IP address
 PORT = 65432  # The port used by the server
 CHUNK_SIZE = 1024
+VERIFY_KEY_BYTES_SIZE = 32
 
 
 def main() -> None:
@@ -15,11 +17,23 @@ def main() -> None:
         b"\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF",
     )
 
+    # Generate a new random signing key
+    signing_key = SigningKey.generate()
+    # Obtain the verify key for a given signing key
+    verify_key = signing_key.verify_key
+
+    # Serialize the verify key to send it to a third party
+    verify_key_bytes = verify_key.encode()
+
     box = nacl.secret.SecretBox(key)
     nonce = nacl.utils.random(nacl.secret.SecretBox.NONCE_SIZE)
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
+
+        # Send verify key bytes
+        s.sendall(verify_key_bytes)
+
         # Send nonce once at the beginning
         s.sendall(nonce)
         with open("./data/client/file.txt", "rb") as file:
@@ -32,10 +46,12 @@ def main() -> None:
                 elif len(chunk) % 16 != 0:
                     chunk += bytes(" " * (16 - (len(chunk) % 16)), "utf-8")
 
-                # encrypt nonce
-                data = box.encrypt(chunk, nonce).ciphertext
-                # send encrypted data
-                s.sendall(data)
+                # sign data
+                signed_data = signing_key.sign(chunk)
+                # encrypt signed data
+                encrypted_data = box.encrypt(signed_data, nonce).ciphertext
+                # send encrypted signed data
+                s.sendall(encrypted_data)
                 # increment nonce to get a new one
                 nonce = sodium_increment(nonce)
 

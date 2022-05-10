@@ -2,11 +2,14 @@ import socket
 import nacl.utils
 import nacl.secret
 from nacl.bindings import sodium_increment
+from nacl.signing import VerifyKey
 
 
 HOST = "127.0.0.1"  # Standard loopback interface address (localhost)
 PORT = 65432  # Port to listen on (non-privileged ports are > 1023)
 CHUNK_SIZE = 1024
+VERIFY_KEY_BYTES_SIZE = 32
+SIGN_SIZE = 64
 
 
 def main() -> None:
@@ -24,6 +27,11 @@ def main() -> None:
         conn, addr = s.accept()
         with conn:
             print(f"Connected by {addr}")
+            # receive verified_key_bytes
+            verified_key_bytes = conn.recv(VERIFY_KEY_BYTES_SIZE)
+            # Create a VerifyKey object from a hex serialized public key
+            verify_key = VerifyKey(verified_key_bytes)
+
             # receive nonce to decrypt
             nonce = conn.recv(nacl.secret.SecretBox.NONCE_SIZE)
 
@@ -31,14 +39,16 @@ def main() -> None:
             while True:
                 # receive encrypted data
                 # size of this is chunk + mac size
-                data = conn.recv(CHUNK_SIZE + box.MACBYTES)
+                data = conn.recv(CHUNK_SIZE + box.MACBYTES + SIGN_SIZE)
                 if len(data) == 0:
                     break
                 elif len(data) % 16 != 0:
                     data += bytes(" " * (16 - (len(data) % 16)), "utf-8")
 
                 # decrypt using nonce
-                file_data += box.decrypt(data, nonce)
+                decrypted_data = box.decrypt(data, nonce)
+                verified_message = verify_key.verify(decrypted_data)
+                file_data += verified_message
                 # update nonce so that is same as in client
                 nonce = sodium_increment(nonce)
 
