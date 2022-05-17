@@ -38,6 +38,18 @@ def main() -> None:
         s.sendall(nonce)
         with open("./data/client/file.txt", "rb") as file:
             while True:
+                # Sends user and password
+                user = input("User: ")
+                password = input("Password: ")
+                signed_cred = signing_key.sign(make_64_bytes(user + "=" + password))
+                encrypted_cred = box.encrypt(signed_cred, nonce)
+                s.sendall(encrypted_cred)
+                nonce = sodium_increment(nonce)
+                valid_credentials = int(str(s.recv(1)))
+                if valid_credentials:
+                    break
+
+            while True:
                 # read file in chunks instead of lines to be consistent with size of
                 # encryption and decription
                 chunk = file.read(CHUNK_SIZE)
@@ -54,6 +66,12 @@ def main() -> None:
                 s.sendall(encrypted_data)
                 # increment nonce to get a new one
                 nonce = sodium_increment(nonce)
+
+
+def make_64_bytes(string: str):
+    by = bytes(string, "utf-8")
+    by += b" " * (64 - len(by))
+    return by
 
 
 if __name__ == "__main__":
