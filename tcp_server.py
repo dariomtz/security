@@ -49,14 +49,11 @@ def main() -> None:
                 nonce = sodium_increment(nonce)
                 verified_cred = verify_key.verify(decrypted_cred)
                 user_try, password_try, rest = verified_cred.decode("utf-8").split("=")
-                print(user_try, password_try)
                 if user_try == user and password_try == password:
                     conn.sendall(b"1")
                     break
                 else:
                     conn.sendall(b"0")
-
-            bitacora(user)
 
             filename = conn.recv(CREDENTIALS_SIZE + box.MACBYTES + SIGN_SIZE)
             decrypted_filename = box.decrypt(filename, nonce)
@@ -64,6 +61,7 @@ def main() -> None:
                 verify_key.verify(decrypted_filename).decode("utf-8").split("/")[0]
             )
             nonce = sodium_increment(nonce)
+            bitacora(user, verified_name)
 
             file_data = b""
             while True:
@@ -86,9 +84,16 @@ def main() -> None:
         file.write(file_data)
 
 
-def bitacora(string):
+def bitacora(string, filename):
     with open("./data/server/bitacora.txt", "a") as file:
-        file.write(string + "Accedio al documento en " + str(datetime.now()) + "\n")
+        file.write(
+            string
+            + " respaldo el documento "
+            + filename
+            + " en "
+            + str(datetime.now())
+            + "\n"
+        )
 
 
 if __name__ == "__main__":
